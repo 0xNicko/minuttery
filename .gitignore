@@ -1,0 +1,12 @@
+.solana/
+
+# Generated dependencies and build output
+**/node_modules/
+**/target/
+**/.anchor/
+**/test-ledger/
+**/.yarn/
+**/*.rs.bk
+
+# Local deployment keypairs
+**/deploy/*-keypair.json
