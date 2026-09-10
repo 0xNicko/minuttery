@@ -132,47 +132,31 @@ describe("minuttery devnet end-to-end", function () {
       await sleep(3_000);
     }
 
-    const alpha = buildAlpha(roundId, BET_AMOUNT * 2, [
-      { wallet: payer, seed: firstSeed },
-      { wallet: secondPlayer.publicKey, seed: secondSeed },
-    ]);
-    print("alpha construido", Buffer.from(alpha).toString("hex"));
+    print("Apuestas cerradas; esperando que el worker liquide la ronda", roundId);
+    const workerDeadline = settleAt + SETTLE_GRACE_SEC;
+    let resolvedByWorker = false;
+    while (Math.floor(Date.now() / 1000) < workerDeadline) {
+      const currentRound = await program.account.roundState.fetchNullable(round);
+      if (currentRound === null) {
+        resolvedByWorker = true;
+        print("El worker liquidó la ronda y la cuenta quedó sin lamports", roundId);
+        break;
+      }
 
-    const proof = operator.prove(alpha);
-    const output = proof.verify(operator.publicKey, alpha);
-    const winnerIndex = output[0] % 2;
-    const winner = winnerIndex === 0 ? payer : secondPlayer.publicKey;
-    print("Proof ECVRF generado y verificado localmente", {
-      proofLength: proof.bytes.length,
-      proof: Buffer.from(proof.bytes).toString("hex"),
-      output: Buffer.from(output).toString("hex"),
-      winnerIndex,
-      winner: winner.toBase58(),
-    });
+      if (currentRound.status.resolved !== undefined) {
+        resolvedByWorker = true;
+        print("El worker liquidó la ronda", currentRound.winner.toBase58());
+        break;
+      }
 
-    if (Math.floor(Date.now() / 1000) >= settleAt + SETTLE_GRACE_SEC) {
-      throw new Error("La ventana de liquidación expiró antes de enviar la prueba");
+      print("Esperando liquidación del worker...");
+      await sleep(3_000);
     }
 
-    const liquidationSignature = await program.methods
-      .liquidateRound(Array.from(proof.bytes))
-      .accountsPartial({
-        liquidator: payer,
-        house: payer,
-        winner,
-        initiator: payer,
-        config,
-        round,
-        systemProgram: SystemProgram.programId,
-      })
-      .rpc();
-    print("liquidateRound() confirmado", liquidationSignature);
-    const roundAfterLiquidation = await provider.connection.getAccountInfo(round);
-    if (roundAfterLiquidation === null) {
-      print("Cuenta de la ronda cerrada por Solana al quedar sin lamports: comportamiento esperado");
-    } else {
-      print("Cuenta de la ronda aún existe", roundAfterLiquidation.data.length);
+    if (!resolvedByWorker) {
+      throw new Error("El worker no liquidó la ronda dentro de la ventana permitida");
     }
+
     print("Balances finales", {
       payer: `${(await provider.connection.getBalance(payer)) / LAMPORTS_PER_SOL} SOL`,
       secondPlayer: `${(await provider.connection.getBalance(secondPlayer.publicKey)) / LAMPORTS_PER_SOL} SOL`,
