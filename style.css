@@ -1,24 +1,4 @@
-:root {
-  --bg: #0f172a;
-  --bg-soft: #111827;
-  --card: #1f2937;
-  --text: #e5e7eb;
-  --muted: #94a3b8;
-  --accent: #22c55e;
-  --accent-strong: #16a34a;
-  --shadow: rgba(15, 23, 42, 0.45);
-}
-
-body.light {
-  --bg: #f8fafc;
-  --bg-soft: #e2e8f0;
-  --card: #ffffff;
-  --text: #0f172a;
-  --muted: #475569;
-  --accent: #16a34a;
-  --accent-strong: #15803d;
-  --shadow: rgba(148, 163, 184, 0.35);
-}
+:root { --bg: #0a0b0b; --panel: #111313; --text: #f3f4e9; --muted: #8a9088; --accent: #f1ff0a; --line: #292d29; }
 
 * {
   box-sizing: border-box;
@@ -27,71 +7,37 @@ body.light {
 body {
   margin: 0;
   min-height: 100vh;
-  display: grid;
-  place-items: center;
-  background: linear-gradient(135deg, var(--bg), var(--bg-soft));
+  background: var(--bg);
   color: var(--text);
-  font-family: Arial, Helvetica, sans-serif;
-  transition: background 0.2s ease, color 0.2s ease;
+  font-family: 'Trebuchet MS', 'Segoe UI', sans-serif;
+  overflow-x: hidden;
 }
-
-.container {
-  width: min(90vw, 560px);
-}
-
-.card {
-  background: var(--card);
-  border-radius: 18px;
-  padding: 2rem;
-  box-shadow: 0 18px 45px var(--shadow);
-  border: 1px solid rgba(148, 163, 184, 0.2);
-}
-
-.eyebrow {
-  margin: 0 0 0.5rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--accent);
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-h1 {
-  margin: 0;
-  font-size: clamp(2.2rem, 5vw, 3.5rem);
-}
-
-.subtitle {
-  color: var(--muted);
-  line-height: 1.6;
-  margin: 1rem 0 1.5rem;
-}
-
-button {
-  border: none;
-  border-radius: 999px;
-  padding: 0.8rem 1.25rem;
-  font-size: 0.95rem;
-  font-weight: 700;
-  background: var(--accent);
-  color: white;
-  cursor: pointer;
-  transition: transform 0.15s ease, background 0.2s ease;
-}
-
-button:hover {
-  transform: translateY(-1px);
-  background: var(--accent-strong);
-}
-
-.status {
-  margin-top: 1.3rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--muted);
-}
-
-strong {
-  color: var(--text);
-}
+body::before { content: ''; position: fixed; inset: 0; pointer-events: none; opacity: .3; background-image: linear-gradient(rgba(241,255,10,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(241,255,10,.035) 1px, transparent 1px); background-size: 80px 80px; mask-image: linear-gradient(to bottom, black, transparent 78%); }
+.noise { position: fixed; inset: 0; pointer-events: none; opacity: .035; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.8'/%3E%3C/svg%3E"); }
+.topbar { height: 76px; padding: 0 clamp(22px, 5vw, 80px); display: flex; align-items: center; gap: 30px; border-bottom: 1px solid var(--line); position: relative; z-index: 1; }
+.brand { display: flex; align-items: center; gap: 10px; color: var(--text); font-weight: 700; font-size: 1.05rem; letter-spacing: .04em; text-decoration: none; }
+.brand-mark { display: grid; place-items: center; width: 27px; height: 27px; color: var(--bg); background: var(--accent); font: 900 1.2rem Georgia, serif; transform: rotate(-8deg); }
+.network-status { margin-left: auto; color: var(--muted); font-size: .7rem; text-transform: uppercase; letter-spacing: .12em; }
+.live-dot, .eyebrow span { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); margin-right: 7px; }
+button { font: inherit; cursor: pointer; }
+.wallet-button { color: var(--accent); border: 1px solid #667000; background: transparent; padding: 11px 17px; font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; transition: .2s ease; }
+.wallet-button:hover { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+.arena { width: min(920px, calc(100% - 44px)); min-height: calc(100vh - 76px); margin: auto; display: grid; place-items: center; position: relative; z-index: 1; padding: 66px 0 82px; }
+.game-panel { width: 100%; min-width: 0; overflow: hidden; background: rgba(17,19,19,.86); border: 1px solid var(--line); padding: clamp(32px, 5vw, 64px); box-shadow: 18px 20px 0 rgba(241,255,10,.03); }
+.bet-presets { display: flex; gap: 9px; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: thin; scrollbar-color: #5e6500 transparent; padding: 2px 1px 11px; margin: -22px 0 34px; }
+.bet-presets::-webkit-scrollbar { height: 3px; }.bet-presets::-webkit-scrollbar-track { background: transparent; }.bet-presets::-webkit-scrollbar-thumb { background: #5e6500; }
+.bet-preset { flex: 1 1 0; min-width: 92px; padding: 11px 15px; border: 1px solid var(--line); background: #151817; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-size: .62rem; text-align: center; transition: .2s ease; }.bet-preset strong { color: var(--text); font-size: .8rem; margin-left: 3px; }.bet-preset:hover, .bet-preset.is-selected { color: var(--bg); background: var(--accent); border-color: var(--accent); }.bet-preset:hover strong, .bet-preset.is-selected strong { color: var(--bg); }
+.round-header { display: flex; justify-content: space-between; color: var(--accent); text-transform: uppercase; letter-spacing: .14em; font-size: .66rem; font-weight: 700; }
+.round-number { color: var(--muted); }.round-number strong { color: var(--text); margin-left: 4px; }
+.timer-wrap { min-width: 0; margin: 50px 0 42px; }.timer { max-width: 100%; overflow: hidden; text-align: center; font: 400 clamp(5rem, 12vw, 10.5rem)/.85 'Courier New', monospace; letter-spacing: -.1em; color: var(--text); white-space: nowrap; }
+.timer-format { color: var(--accent); font: 700 .52rem 'Courier New', monospace; letter-spacing: .14em; margin-top: 18px; text-align: center; opacity: .72; }
+.timer-track { margin-top: 27px; height: 2px; background: #2a2e2a; }.timer-track span { display: block; height: 100%; width: 0; background: var(--accent); box-shadow: 0 0 14px var(--accent); transition: width .2s linear; }
+.timer-labels { display: flex; justify-content: space-between; color: #656b63; font: .62rem 'Courier New', monospace; margin-top: 9px; }
+.winner-note { margin: 19px 0 0; color: var(--muted); font-size: .68rem; text-align: center; letter-spacing: .02em; }.winner-note strong { color: var(--accent); font-weight: 700; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 22px 0; }.stat + .stat { border-left: 1px solid var(--line); padding-left: 27px; }
+.stat-label { display: block; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; font-size: .62rem; margin-bottom: 8px; }.stat strong { font: 400 1.55rem Georgia, serif; }.stat small { color: var(--accent); font: 700 .65rem 'Trebuchet MS', sans-serif; letter-spacing: .08em; }
+.action-area { margin-top: 28px; }.bet-button { width: 100%; display: flex; align-items: center; justify-content: center; padding: 20px 23px; border: 0; background: var(--accent); color: var(--bg); text-transform: uppercase; letter-spacing: .08em; font-size: .76rem; font-weight: 900; transition: transform .2s ease, box-shadow .2s ease; }.bet-button:hover:not(:disabled) { transform: translate(-3px, -3px); box-shadow: 6px 6px 0 rgba(241,255,10,.25); }.bet-button:disabled { opacity: .42; cursor: not-allowed; }
+.action-message { min-height: 18px; color: var(--muted); font-size: .7rem; text-align: center; margin: 13px 0 0; }.footer-note { position: absolute; bottom: 28px; left: 0; color: #555b54; font-size: .61rem; letter-spacing: .1em; text-transform: uppercase; display: flex; align-items: center; gap: 10px; }.footer-note strong { color: #858b82; }.footer-line { width: 45px; height: 1px; background: var(--line); }
+.wallet-modal { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 20px; background: rgba(5, 6, 6, .78); backdrop-filter: blur(8px); }.wallet-modal[hidden] { display: none; }.wallet-dialog { position: relative; width: min(410px, 100%); padding: 34px; background: var(--panel); border: 1px solid var(--line); box-shadow: 12px 12px 0 rgba(241,255,10,.08); }.modal-close { position: absolute; top: 13px; right: 16px; border: 0; background: transparent; color: var(--muted); font-size: 1.5rem; }.modal-kicker { color: var(--accent); text-transform: uppercase; letter-spacing: .15em; font-size: .6rem; font-weight: 700; }.wallet-dialog h2 { margin: 14px 0 8px; font: 400 2rem Georgia, serif; }.modal-copy { color: var(--muted); font-size: .8rem; line-height: 1.5; margin-bottom: 24px; }.wallet-list { display: grid; gap: 10px; }.wallet-option { width: 100%; display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 12px; padding: 14px; border: 1px solid var(--line); background: transparent; color: var(--text); text-align: left; }.wallet-option:hover { border-color: var(--accent); }.wallet-icon { display: grid; place-items: center; width: 28px; height: 28px; color: var(--bg); background: var(--accent); font-weight: 900; }.solflare-icon { background: #f6a623; }.wallet-option strong, .wallet-option small { display: block; }.wallet-option small { color: var(--muted); font-size: .65rem; margin-top: 3px; }.wallet-chevron { color: var(--accent); }.wallet-message { min-height: 18px; color: #ff7575; font-size: .7rem; line-height: 1.4; margin: 18px 0 0; }
+@media (max-width: 760px) { .topbar { height: 66px; padding: 0 22px; }.network-status { display: none; }.wallet-button { margin-left: auto; padding: 9px 12px; font-size: .64rem; }.arena { width: min(100% - 22px, 560px); min-height: calc(100vh - 66px); padding: 8px 0 76px; }.timer-wrap { margin: 38px 0 34px; }.timer { font-size: clamp(3.65rem, 17vw, 6.3rem); }.game-panel { width: calc(94% - 12px); margin-right: 12px; padding: 32px 20px; }.bet-presets { margin-top: -9px; margin-bottom: 30px; }.bet-preset { flex: 0 0 auto; }.footer-note { bottom: 22px; } }
+@media (min-width: 761px) { .arena { width: min(780px, calc(100% - 64px)); padding-top: 48px; padding-bottom: 78px; }.game-panel { padding: 42px 48px; }.timer-wrap { margin-top: 42px; margin-bottom: 36px; }.timer { font-size: clamp(4rem, 8vw, 7rem); } }
