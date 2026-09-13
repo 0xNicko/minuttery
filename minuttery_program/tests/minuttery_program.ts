@@ -1,7 +1,6 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { Keypair, PublicKey, SystemProgram, Transaction } from "@solana/web3.js";
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { Minuttery } from "../target/types/minuttery";
 
@@ -9,7 +8,11 @@ import { Minuttery } from "../target/types/minuttery";
 const { SecretKey } = require("@blueshift-gg/solana-ecvrf");
 
 const LAMPORTS_PER_SOL = 1_000_000_000;
-const BET_AMOUNT = 100_000_000;
+const ROOM_TIER_01 = 0;
+const ROOM_TIER_02 = 1;
+const TIER_AMOUNTS = [100_000_000, 200_000_000];
+const BET_AMOUNT = TIER_AMOUNTS[ROOM_TIER_01];
+const ROOM_TIER = ROOM_TIER_01;
 const SETTLE_GRACE_SEC = 30;
 const ECVRF_KEYPAIR_PATH = "/workspaces/minuttery/.solana/ecvrf-test-keypair.json";
 
@@ -31,14 +34,6 @@ function i64Bytes(value: number): Buffer {
   return bytes;
 }
 
-function buildAlpha(roundId: number, totalPot: number, players: { wallet: PublicKey; seed: Uint8Array }[]): Uint8Array {
-  const parts = [Buffer.from("minuttery-v1"), i64Bytes(roundId), i64Bytes(totalPot)];
-  for (const player of players) {
-    parts.push(Buffer.from(player.wallet.toBytes()), Buffer.from(player.seed));
-  }
-  return createHash("sha256").update(Buffer.concat(parts)).digest();
-}
-
 function loadOrCreateOperator(): any {
   mkdirSync("/workspaces/minuttery/.solana", { recursive: true });
   if (!existsSync(ECVRF_KEYPAIR_PATH)) {
@@ -54,7 +49,7 @@ async function waitForBettingWindow(provider: anchor.AnchorProvider): Promise<{ 
     const slot = await provider.connection.getSlot("confirmed");
     const timestamp = (await provider.connection.getBlockTime(slot)) ?? Math.floor(Date.now() / 1000);
     const second = timestamp % 60;
-    if (second < 45) return { roundId: Math.floor(timestamp / 60), timestamp };
+    if (second < 35) return { roundId: Math.floor(timestamp / 60), timestamp };
     print(`Esperando el siguiente minuto. Segundo actual: ${second}`);
     await sleep(2_000);
   }
@@ -94,36 +89,59 @@ describe("minuttery devnet end-to-end", function () {
       if (!configInfo.house.equals(payer)) throw new Error("La config usa otra house");
     }
 
-    const secondPlayer = Keypair.generate();
-    print("Segundo jugador temporal", secondPlayer.publicKey.toBase58());
+    const players = [Keypair.generate(), Keypair.generate(), Keypair.generate()];
+    print("Jugadores temporales", players.map((player) => player.publicKey.toBase58()));
     const fundingSignature = await provider.sendAndConfirm(
       new Transaction().add(
-        SystemProgram.transfer({ fromPubkey: payer, toPubkey: secondPlayer.publicKey, lamports: 400_000_000 }),
+        ...players.map((player) => SystemProgram.transfer({
+          fromPubkey: payer,
+          toPubkey: player.publicKey,
+          lamports: 500_000_000,
+        })),
       ),
     );
-    print("Segundo jugador financiado con 0.4 SOL", fundingSignature);
+    print("Jugadores financiados", fundingSignature);
 
     const { roundId, timestamp } = await waitForBettingWindow(provider);
-    const [round] = PublicKey.findProgramAddressSync([Buffer.from("round"), i64Bytes(roundId)], program.programId);
-    const firstSeed = Uint8Array.from({ length: 32 }, (_, index) => index + 1);
-    const secondSeed = Uint8Array.from({ length: 32 }, (_, index) => 255 - index);
-    print("Ronda seleccionada", { roundId, timestamp, round: round.toBase58() });
+    const roundDefinitions = [
+      { tier: ROOM_TIER_01, amount: TIER_AMOUNTS[ROOM_TIER_01], firstPlayer: payer, firstSigner: undefined, secondPlayer: players[0] },
+      { tier: ROOM_TIER_02, amount: TIER_AMOUNTS[ROOM_TIER_02], firstPlayer: players[1].publicKey, firstSigner: players[1], secondPlayer: players[2] },
+    ];
+    const rounds = roundDefinitions.map(({ tier }) => PublicKey.findProgramAddressSync(
+      [Buffer.from("round"), Buffer.from([tier]), i64Bytes(roundId)],
+      program.programId,
+    )[0]);
+    print("Rondas seleccionadas en el mismo minuto", {
+      roundId,
+      timestamp,
+      rounds: roundDefinitions.map(({ tier, amount }, index) => ({
+        tier,
+        amount,
+        round: rounds[index].toBase58(),
+      })),
+    });
 
-    print("Enviando primera apuesta", { amount: BET_AMOUNT, seed: Buffer.from(firstSeed).toString("hex") });
-    const firstBetSignature = await program.methods
-      .placeBet(new anchor.BN(roundId), new anchor.BN(BET_AMOUNT), Array.from(firstSeed))
-      .accountsPartial({ player: payer, round, systemProgram: SystemProgram.programId })
-      .rpc();
-    print("Primera apuesta confirmada", firstBetSignature);
+    for (const [index, definition] of roundDefinitions.entries()) {
+      const { tier, amount, firstPlayer, firstSigner, secondPlayer } = definition;
+      const round = rounds[index];
+      print(`Tier ${tier}: enviando primera apuesta`, { amount, player: firstPlayer.toBase58() });
+      const firstBetSignature = await program.methods
+        .placeBet(new anchor.BN(roundId), tier, new anchor.BN(amount))
+        .accountsPartial({ player: firstPlayer, round, systemProgram: SystemProgram.programId })
+        .signers(firstSigner ? [firstSigner] : [])
+        .rpc();
+      print(`Tier ${tier}: primera apuesta confirmada`, firstBetSignature);
 
-    print("Enviando segunda apuesta", { player: secondPlayer.publicKey.toBase58(), amount: BET_AMOUNT });
-    const secondBetSignature = await program.methods
-      .placeBet(new anchor.BN(roundId), new anchor.BN(BET_AMOUNT), Array.from(secondSeed))
-      .accountsPartial({ player: secondPlayer.publicKey, round, systemProgram: SystemProgram.programId })
-      .signers([secondPlayer])
-      .rpc();
-    print("Segunda apuesta confirmada", secondBetSignature);
-    print("Estado de la ronda", await program.account.roundState.fetch(round));
+      print(`Tier ${tier}: enviando segunda apuesta`, { amount, player: secondPlayer.publicKey.toBase58() });
+      const secondBetSignature = await program.methods
+        .placeBet(new anchor.BN(roundId), tier, new anchor.BN(amount))
+        .accountsPartial({ player: secondPlayer.publicKey, round, systemProgram: SystemProgram.programId })
+        .signers([secondPlayer])
+        .rpc();
+      print(`Tier ${tier}: segunda apuesta confirmada`, secondBetSignature);
+      print(`Tier ${tier}: estado`, await program.account.roundState.fetch(round));
+      print(`Tier ${tier}: balance`, `${(await provider.connection.getBalance(round)) / LAMPORTS_PER_SOL} SOL`);
+    }
 
     const settleAt = roundId * 60 + 55;
     while (Math.floor(Date.now() / 1000) < settleAt) {
@@ -132,35 +150,39 @@ describe("minuttery devnet end-to-end", function () {
       await sleep(3_000);
     }
 
-    print("Apuestas cerradas; esperando que el worker liquide la ronda", roundId);
+    print("Apuestas cerradas; esperando que el worker liquide ambas rondas", roundId);
     const workerDeadline = settleAt + SETTLE_GRACE_SEC;
-    let resolvedByWorker = false;
+    const resolvedRounds = new Set<string>();
     while (Math.floor(Date.now() / 1000) < workerDeadline) {
-      const currentRound = await program.account.roundState.fetchNullable(round);
-      if (currentRound === null) {
-        resolvedByWorker = true;
-        print("El worker liquidó la ronda y la cuenta quedó sin lamports", roundId);
-        break;
+      for (const [index, round] of rounds.entries()) {
+        const key = round.toBase58();
+        if (resolvedRounds.has(key)) continue;
+        const currentRound = await program.account.roundState.fetchNullable(round);
+        if (currentRound === null) {
+          resolvedRounds.add(key);
+          print(`Tier ${roundDefinitions[index].tier}: worker cerró la cuenta`);
+        } else if (currentRound.status.resolved !== undefined) {
+          resolvedRounds.add(key);
+          print(`Tier ${roundDefinitions[index].tier}: worker liquidó la ronda`, currentRound.winner.toBase58());
+        }
       }
 
-      if (currentRound.status.resolved !== undefined) {
-        resolvedByWorker = true;
-        print("El worker liquidó la ronda", currentRound.winner.toBase58());
-        break;
-      }
-
-      print("Esperando liquidación del worker...");
+      if (resolvedRounds.size === rounds.length) break;
+      print(`Esperando liquidación del worker: ${resolvedRounds.size}/${rounds.length}`);
       await sleep(3_000);
     }
 
-    if (!resolvedByWorker) {
-      throw new Error("El worker no liquidó la ronda dentro de la ventana permitida");
+    if (resolvedRounds.size !== rounds.length) {
+      throw new Error(`El worker liquidó ${resolvedRounds.size}/${rounds.length} rondas dentro de la ventana permitida`);
     }
 
     print("Balances finales", {
       payer: `${(await provider.connection.getBalance(payer)) / LAMPORTS_PER_SOL} SOL`,
-      secondPlayer: `${(await provider.connection.getBalance(secondPlayer.publicKey)) / LAMPORTS_PER_SOL} SOL`,
+      players: await Promise.all(players.map(async (player) => ({
+        wallet: player.publicKey.toBase58(),
+        balance: `${(await provider.connection.getBalance(player.publicKey)) / LAMPORTS_PER_SOL} SOL`,
+      }))),
     });
-    print("Test E2E completado correctamente");
+    print("Test E2E de dos rondas completado correctamente");
   });
 });

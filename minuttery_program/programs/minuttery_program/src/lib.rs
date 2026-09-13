@@ -5,16 +5,23 @@ use solana_ecvrf::{Proof, PublicKey};
 
 declare_id!("9Uf52hSPJPDqDj7QFqL5dKmdJseU1pRtzL8oNQGeDxrP");
 
-pub const MIN_BET: u64 = 100_000_000; // 0.1 SOL
-pub const BETTING_CUTOFF_SEC: i64 = 55; // apuestas 0–54s
-pub const SETTLE_GRACE_SEC: i64 = 30; // prueba hasta segundo 85 del minuto
+pub const BETTING_CUTOFF_SEC: i64 = 55;
+pub const SETTLE_GRACE_SEC: i64 = 30;
 pub const PROOF_LEN: usize = 80;
+pub const MAX_PARTICIPANTS: usize = 24;
+
+pub const ROOM_TIERS: [u64; 5] = [
+    100_000_000,
+    200_000_000,
+    1_000_000_000,
+    2_000_000_000,
+    5_000_000_000,
+];
 
 #[program]
 pub mod minuttery {
     use super::*;
 
-    /// Una vez: pubkey ECVRF del operador (tu VM) + wallet de la casa.
     pub fn initialize(ctx: Context<Initialize>, operator: [u8; 32], house: Pubkey) -> Result<()> {
         PublicKey(operator)
             .validate()
@@ -28,38 +35,31 @@ pub mod minuttery {
         Ok(())
     }
 
-    pub fn place_bet(ctx: Context<PlaceBet>, round_id: i64, amount: u64, seed: [u8; 32]) -> Result<()> {
+    pub fn place_bet(
+        ctx: Context<PlaceBet>,
+        round_id: i64,
+        room_tier: u8,
+        amount: u64,
+    ) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
-        let current_round = now / 60;
-        let second = now % 60;
+        require!(round_id == now / 60, CustomError::InvalidRoundId);
+        require!(now % 60 < BETTING_CUTOFF_SEC, CustomError::BettingClosed);
 
-        require!(round_id == current_round, CustomError::InvalidRoundId);
-        require!(second < BETTING_CUTOFF_SEC, CustomError::BettingClosed);
-        require!(amount >= MIN_BET, CustomError::InvalidAmount);
+        let tier_amount = room_tier_amount(room_tier)?;
+        require!(amount == tier_amount, CustomError::InvalidAmount);
 
         let round = &mut ctx.accounts.round;
-        let round_ai = round.to_account_info();
+        let player = ctx.accounts.player.key();
 
-        if round.round_id == 0 {
-            round.round_id = current_round;
-            round.participants_count = 0;
-            round.total_pot = 0;
-            round.status = RoundStatus::Open;
-            round.initiator = ctx.accounts.player.key();
-            round.initiator_rent = round_ai.lamports();
-            round.winner = Pubkey::default();
-            round.players = Vec::new();
-        }
-
-        require!(round.status == RoundStatus::Open, CustomError::BettingClosed);
+        require!(round.n as usize <= MAX_PARTICIPANTS, CustomError::RoundFull);
         require!(
-            (round.participants_count as usize) < RoundState::MAX_PARTICIPANTS,
+            (round.n as usize) < MAX_PARTICIPANTS,
             CustomError::RoundFull
         );
-        require!(
-            !round.players.iter().any(|p| p.wallet == ctx.accounts.player.key()),
-            CustomError::AlreadyJoined
-        );
+
+        for i in 0..round.n as usize {
+            require!(round.players[i] != player, CustomError::AlreadyJoined);
+        }
 
         system_program::transfer(
             CpiContext::new(
@@ -72,70 +72,68 @@ pub mod minuttery {
             amount,
         )?;
 
-        round.players.push(PlayerEntry {
-            wallet: ctx.accounts.player.key(),
-            seed,
-            amount,
-            refunded: false,
-        });
-        round.participants_count += 1;
-        round.total_pot += amount;
+        let player_index = round.n as usize;
+        round.players[player_index] = player;
+        round.n = round
+            .n
+            .checked_add(1)
+            .ok_or(CustomError::RoundFull)?;
         Ok(())
     }
 
-    /// La VM (o quien tenga la prueba) llama esto DESPUÉS del segundo 55.
-    /// `proof` = 80 bytes de `secretKey.prove(alpha)` en la VM.
-    pub fn liquidate_round(ctx: Context<LiquidateRound>, proof_bytes: [u8; PROOF_LEN]) -> Result<()> {
+    pub fn liquidate_round(
+        ctx: Context<LiquidateRound>,
+        round_id: i64,
+        room_tier: u8,
+        proof_bytes: [u8; PROOF_LEN],
+    ) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
-        let round = &mut ctx.accounts.round;
+        let round = &ctx.accounts.round;
         let cfg = &ctx.accounts.config;
 
-        require!(round.status == RoundStatus::Open, CustomError::AlreadyResolved);
-        require!(now >= settle_open_ts(round.round_id), CustomError::TooEarlyToSettle);
-        require!(now < expire_ts(round.round_id), CustomError::SettleWindowClosed);
+        require!(now >= settle_open_ts(round_id), CustomError::TooEarlyToSettle);
+        require!(now < expire_ts(round_id), CustomError::SettleWindowClosed);
         require!(ctx.accounts.house.key() == cfg.house, CustomError::InvalidHouse);
+        require!(round.n > 0, CustomError::EmptyRound);
         require!(
-            ctx.accounts.initiator.key() == round.initiator,
-            CustomError::InvalidInitiatorAccount
+            ctx.accounts.opener.key() == round.players[0],
+            CustomError::InvalidOpener
         );
 
-        let total_pot = round.total_pot;
-        let rent_amount = round.initiator_rent;
-        let round_ai = round.to_account_info();
+        let n = round.n as usize;
+        let total_pot = (n as u64)
+            .checked_mul(room_tier_amount(room_tier)?)
+            .ok_or(CustomError::InvalidAmount)?;
+        let round_ai = ctx.accounts.round.to_account_info();
 
-        if round.participants_count == 0 {
-            return err!(CustomError::EmptyRound);
-        }
-
-        // Un solo jugador: refund, no hay sorteo.
-        if round.participants_count == 1 {
-            let only = round.players[0].wallet;
-            require!(ctx.accounts.winner.key() == only, CustomError::InvalidWinnerAccount);
-
-            let payout = total_pot + rent_amount;
-            **round_ai.try_borrow_mut_lamports()? -= payout;
-            **ctx.accounts.winner.try_borrow_mut_lamports()? += payout;
-
-            round.winner = only;
-            round.status = RoundStatus::Resolved;
+        if n == 1 {
+            require!(
+                ctx.accounts.winner.key() == round.players[0],
+                CustomError::InvalidWinnerAccount
+            );
+            **round_ai.try_borrow_mut_lamports()? -= total_pot;
+            **ctx.accounts.winner.try_borrow_mut_lamports()? += total_pot;
+            // close = opener devuelve el rent
             return Ok(());
         }
 
-        let alpha = build_alpha(round);
+        let mut wallets = round.players[..n].to_vec();
+        wallets.sort();
+
+        let alpha = build_alpha(round_id, total_pot, &wallets);
         let output = Proof(proof_bytes)
             .verify(&PublicKey(cfg.operator), &alpha)
             .map_err(|_| error!(CustomError::InvalidProof))?;
 
-        let winner_index = winner_index_from_output(&output, round.participants_count);
-        let winner_pubkey = round.players[winner_index].wallet;
-        require!(ctx.accounts.winner.key() == winner_pubkey, CustomError::InvalidWinnerAccount);
+        let winner_pubkey = wallets[winner_index_from_output(&output, n as u32)];
+        require!(
+            ctx.accounts.winner.key() == winner_pubkey,
+            CustomError::InvalidWinnerAccount
+        );
 
         let winner_amount = (total_pot * 965) / 1000;
         let house_amount = (total_pot * 30) / 1000;
-        let liquidator_amount = total_pot.saturating_sub(winner_amount + house_amount);
-
-        **round_ai.try_borrow_mut_lamports()? -= rent_amount;
-        **ctx.accounts.initiator.try_borrow_mut_lamports()? += rent_amount;
+        let opener_amount = total_pot.saturating_sub(winner_amount + house_amount); // 0.5%
 
         **round_ai.try_borrow_mut_lamports()? -= winner_amount;
         **ctx.accounts.winner.try_borrow_mut_lamports()? += winner_amount;
@@ -143,39 +141,44 @@ pub mod minuttery {
         **round_ai.try_borrow_mut_lamports()? -= house_amount;
         **ctx.accounts.house.try_borrow_mut_lamports()? += house_amount;
 
-        **round_ai.try_borrow_mut_lamports()? -= liquidator_amount;
-        **ctx.accounts.liquidator.try_borrow_mut_lamports()? += liquidator_amount;
-
-        round.winner = winner_pubkey;
-        round.status = RoundStatus::Resolved;
+        **round_ai.try_borrow_mut_lamports()? -= opener_amount;
+        **ctx.accounts.opener.try_borrow_mut_lamports()? += opener_amount;
+        // close = opener: rent de ~0.0046 SOL
         Ok(())
     }
 
-    /// Si la VM no publica la prueba a tiempo: cada jugador recupera su apuesta.
-    pub fn claim_refund(ctx: Context<ClaimRefund>) -> Result<()> {
+    /// Cualquiera, después del grace. Devuelve cada apuesta y el rent al opener.
+    pub fn refund_all(
+        ctx: Context<RefundAll>,
+        round_id: i64,
+        _room_tier: u8,
+    ) -> Result<()> {
         let now = Clock::get()?.unix_timestamp;
-        let round = &mut ctx.accounts.round;
+        let round = &ctx.accounts.round;
 
-        require!(now >= expire_ts(round.round_id), CustomError::NotExpired);
-        require!(round.status != RoundStatus::Resolved, CustomError::AlreadyResolved);
+        require!(now >= expire_ts(round_id), CustomError::NotExpired);
+        require!(round.n > 0, CustomError::EmptyRound);
+        require!(
+            ctx.accounts.opener.key() == round.players[0],
+            CustomError::InvalidOpener
+        );
+        require!(
+            ctx.remaining_accounts.len() == round.n as usize,
+            CustomError::SeatCountMismatch
+        );
 
-        if round.status == RoundStatus::Open {
-            round.status = RoundStatus::Expired;
+        let amount = room_tier_amount(_room_tier)?;
+        let round_ai = ctx.accounts.round.to_account_info();
+        let n = round.n as usize;
+
+        for i in 0..n {
+            let dest = &ctx.remaining_accounts[i];
+            require!(dest.key() == round.players[i], CustomError::InvalidSeatAccount);
+            require!(dest.is_writable, CustomError::InvalidSeatAccount);
+            **round_ai.try_borrow_mut_lamports()? -= amount;
+            **dest.try_borrow_mut_lamports()? += amount;
         }
-
-        let player_key = ctx.accounts.player.key();
-        let entry = round
-            .players
-            .iter_mut()
-            .find(|p| p.wallet == player_key)
-            .ok_or(CustomError::NotAParticipant)?;
-        require!(!entry.refunded, CustomError::AlreadyRefunded);
-
-        let amount = entry.amount;
-        entry.refunded = true;
-
-        **round.to_account_info().try_borrow_mut_lamports()? -= amount;
-        **ctx.accounts.player.try_borrow_mut_lamports()? += amount;
+        // close = opener
         Ok(())
     }
 }
@@ -188,17 +191,22 @@ fn expire_ts(round_id: i64) -> i64 {
     settle_open_ts(round_id) + SETTLE_GRACE_SEC
 }
 
-/// Mismo cálculo en la VM. Si cambia acá, cambia allá.
-fn build_alpha(round: &RoundState) -> Vec<u8> {
-    let mut parts: Vec<&[u8]> = Vec::with_capacity(2 + round.players.len() * 2);
-    let id_bytes = round.round_id.to_le_bytes();
-    let pot_bytes = round.total_pot.to_le_bytes();
-    parts.push(b"minuttery-v1");
+fn room_tier_amount(room_tier: u8) -> Result<u64> {
+    ROOM_TIERS
+        .get(room_tier as usize)
+        .copied()
+        .ok_or_else(|| error!(CustomError::InvalidRoomTier))
+}
+
+fn build_alpha(round_id: i64, total_pot: u64, wallets_sorted: &[Pubkey]) -> Vec<u8> {
+    let mut parts: Vec<&[u8]> = Vec::with_capacity(3 + wallets_sorted.len());
+    let id_bytes = round_id.to_le_bytes();
+    let pot_bytes = total_pot.to_le_bytes();
+    parts.push(b"minuttery-v2");
     parts.push(&id_bytes);
     parts.push(&pot_bytes);
-    for p in &round.players {
-        parts.push(p.wallet.as_ref());
-        parts.push(&p.seed);
+    for w in wallets_sorted {
+        parts.push(w.as_ref());
     }
     hashv(&parts).to_bytes().to_vec()
 }
@@ -209,49 +217,24 @@ fn winner_index_from_output(output: &[u8; 64], n: u32) -> usize {
     (u64::from_le_bytes(x) % n as u64) as usize
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
-pub enum RoundStatus {
-    Open,
-    Resolved,
-    Expired,
-}
-
-#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
-pub struct PlayerEntry {
-    pub wallet: Pubkey,
-    pub seed: [u8; 32],
-    pub amount: u64,
-    pub refunded: bool,
-}
-
 #[account]
+#[derive(InitSpace)]
 pub struct Config {
     pub authority: Pubkey,
-    pub operator: [u8; 32], // address ECVRF = pubkey de tu keypair de la VM
+    pub operator: [u8; 32],
     pub house: Pubkey,
     pub bump: u8,
 }
 
 #[account]
+#[derive(InitSpace)]
 pub struct RoundState {
-    pub round_id: i64,
-    pub participants_count: u32,
-    pub total_pot: u64,
-    pub status: RoundStatus,
-    pub initiator: Pubkey,
-    pub initiator_rent: u64,
-    pub winner: Pubkey,
-    pub players: Vec<PlayerEntry>,
+    pub n: u8,
+    pub players: [Pubkey; MAX_PARTICIPANTS],
 }
 
 impl RoundState {
-    pub const MAX_PARTICIPANTS: usize = 100;
-    // 8 disc + fields + vec prefix + 100 * (32+32+8+1)
-    pub const LEN: usize = 8 + 8 + 4 + 8 + 1 + 32 + 8 + 32 + 4 + 100 * 73;
-}
-
-impl Config {
-    pub const LEN: usize = 8 + 32 + 32 + 32 + 1;
+    pub const LEN: usize = 8 + RoundState::INIT_SPACE; // 8 + 1 + 768 = 777
 }
 
 #[derive(Accounts)]
@@ -261,7 +244,7 @@ pub struct Initialize<'info> {
     #[account(
         init,
         payer = authority,
-        space = Config::LEN,
+        space = 8 + Config::INIT_SPACE,
         seeds = [b"config"],
         bump
     )]
@@ -270,7 +253,7 @@ pub struct Initialize<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(round_id: i64)]
+#[instruction(round_id: i64, room_tier: u8)]
 pub struct PlaceBet<'info> {
     #[account(mut)]
     pub player: Signer<'info>,
@@ -278,7 +261,7 @@ pub struct PlaceBet<'info> {
         init_if_needed,
         payer = player,
         space = RoundState::LEN,
-        seeds = [b"round", round_id.to_le_bytes().as_ref()],
+        seeds = [b"round", room_tier.to_le_bytes().as_ref(), round_id.to_le_bytes().as_ref()],
         bump
     )]
     pub round: Account<'info, RoundState>,
@@ -286,53 +269,67 @@ pub struct PlaceBet<'info> {
 }
 
 #[derive(Accounts)]
+#[instruction(round_id: i64, room_tier: u8)]
 pub struct LiquidateRound<'info> {
-    #[account(mut)]
     pub liquidator: Signer<'info>,
-    #[account(mut)]
+    #[account(mut, address = config.house)]
     pub house: SystemAccount<'info>,
     #[account(mut)]
     pub winner: SystemAccount<'info>,
+    /// Jugador 1. Recibe 0.5% + rent (close).
     #[account(mut)]
-    pub initiator: SystemAccount<'info>,
+    pub opener: SystemAccount<'info>,
     #[account(seeds = [b"config"], bump = config.bump)]
     pub config: Account<'info, Config>,
-    #[account(mut)]
+    #[account(
+        mut,
+        seeds = [b"round", room_tier.to_le_bytes().as_ref(), round_id.to_le_bytes().as_ref()],
+        bump,
+        close = opener
+    )]
     pub round: Account<'info, RoundState>,
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
-pub struct ClaimRefund<'info> {
+#[instruction(round_id: i64, room_tier: u8)]
+pub struct RefundAll<'info> {
+    pub caller: Signer<'info>,
     #[account(mut)]
-    pub player: Signer<'info>,
-    #[account(mut)]
+    pub opener: SystemAccount<'info>,
+    #[account(
+        mut,
+        seeds = [b"round", room_tier.to_le_bytes().as_ref(), round_id.to_le_bytes().as_ref()],
+        bump,
+        close = opener
+    )]
     pub round: Account<'info, RoundState>,
+    pub system_program: Program<'info, System>,
 }
 
 #[error_code]
 pub enum CustomError {
     #[msg("Betting for this round is already closed.")]
     BettingClosed,
-    #[msg("This round has already been resolved.")]
-    AlreadyResolved,
-    #[msg("The bet amount is below the minimum allowed.")]
+    #[msg("The bet amount is invalid.")]
     InvalidAmount,
+    #[msg("The selected room tier is invalid.")]
+    InvalidRoomTier,
     #[msg("The provided round ID does not match the current time.")]
     InvalidRoundId,
-    #[msg("This round has reached its maximum capacity of participants.")]
+    #[msg("This round has reached its maximum capacity.")]
     RoundFull,
     #[msg("The provided account does not match the expected winner.")]
     InvalidWinnerAccount,
-    #[msg("The provided account does not match the original round initiator.")]
-    InvalidInitiatorAccount,
+    #[msg("The provided account does not match the round opener.")]
+    InvalidOpener,
     #[msg("Invalid ECVRF operator public key.")]
     InvalidOperatorKey,
     #[msg("Player already joined this round.")]
     AlreadyJoined,
     #[msg("Too early to settle.")]
     TooEarlyToSettle,
-    #[msg("Settle window closed; use claim_refund.")]
+    #[msg("Settle window closed; use refund_all.")]
     SettleWindowClosed,
     #[msg("House account does not match config.")]
     InvalidHouse,
@@ -342,8 +339,8 @@ pub enum CustomError {
     EmptyRound,
     #[msg("Round has not expired.")]
     NotExpired,
-    #[msg("Not a participant.")]
-    NotAParticipant,
-    #[msg("Already refunded.")]
-    AlreadyRefunded,
+    #[msg("Invalid player account for refund.")]
+    InvalidSeatAccount,
+    #[msg("Player account count does not match the round.")]
+    SeatCountMismatch,
 }

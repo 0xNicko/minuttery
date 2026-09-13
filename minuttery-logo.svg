@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="2048" viewBox="0 0 2048 2048">
+  <rect width="2048" height="2048" fill="none"/>
+  <g transform="rotate(-8 1024 1024)">
+    <rect x="224" y="224" width="1600" height="1600" fill="#F1FF0A"/>
+    <text x="1024" y="1435" text-anchor="middle" fill="#0A0B0B" font-family="Georgia, Times New Roman, serif" font-size="1440" font-weight="900">m</text>
+  </g>
+</svg>

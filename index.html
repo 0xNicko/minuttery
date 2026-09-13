@@ -4,29 +4,29 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0a0b0b" />
-    <title>minuttery | Play the minute</title>
-    <link rel="stylesheet" href="style.css" />
+    <tit</title>
+    <link rel="stylesheet" href="style.css?v=15" />
   </head>
   <body>
     <div class="noise" aria-hidden="true"></div>
     <header class="topbar">
       <a class="brand" href="/" aria-label="minuttery home"><span class="brand-mark">m</span><span>minuttery</span></a>
       <div class="network-status"><span class="live-dot"></span> Solana devnet</div>
-      <button id="connectWallet" class="wallet-button" type="button">Connect wallet</button>
+      <button id="connectWallet" class="wallet-button" style="border-radius: 15px" type="button">Connect wallet</button>
     </header>
     <main class="arena">
-      <section class="game-panel" aria-label="Current round status">
+      <section class="game-panel" style="border-radius: 15px" aria-label="Current round status">
         <div class="bet-presets" aria-label="Choose bet amount">
-          <button class="bet-preset is-selected" type="button" data-amount="0.1">BET <strong>0.1 ◎</strong></button>
-          <button class="bet-preset" type="button" data-amount="0.2">BET <strong>0.2 ◎</strong></button>
-          <button class="bet-preset" type="button" data-amount="1">BET <strong>1 ◎</strong></button>
-          <button class="bet-preset" type="button" data-amount="2">BET <strong>2 ◎</strong></button>
-          <button class="bet-preset" type="button" data-amount="5">BET <strong>5 ◎</strong></button>
+          <button class="bet-preset is-selected" style="border-radius: 15px" type="button" data-amount="0.1">BET <strong>0.1 ◎</strong></button>
+          <button class="bet-preset" style="border-radius: 15px" type="button" data-amount="0.2">BET <strong>0.2 ◎</strong></button>
+          <button class="bet-preset" style="border-radius: 15px" type="button" data-amount="1">BET <strong>1 ◎</strong></button>
+          <button class="bet-preset" style="border-radius: 15px" type="button" data-amount="2">BET <strong>2 ◎</strong></button>
+          <button class="bet-preset" style="border-radius: 15px" type="button" data-amount="5">BET <strong>5 ◎</strong></button>
         </div>
         <div class="round-header"><span id="roundState">round open</span><span class="round-number">#<strong id="roundNumber">--</strong></span></div>
         <div class="timer-wrap"><div class="timer" id="timer" aria-live="polite">00:00:00</div><div class="timer-format">MIN &nbsp;/&nbsp; SEC &nbsp;/&nbsp; MICROSECONDS</div><div class="timer-track"><span id="timerProgress"></span></div><div class="timer-labels"><span>00:00</span><span>01:00</span></div><p class="winner-note">Winner selected in less than <strong id="settleCountdown">85</strong> secs</p></div>
         <div class="stats"><div class="stat"><span class="stat-label">players</span><strong id="playersCount">--</strong></div><div class="stat"><span class="stat-label">total pot</span><strong><span id="potAmount">--</span> <small>SOL</small></strong></div></div>
-        <div class="action-area"><button id="betButton" class="bet-button" type="button"><span>Connect your wallet</span></button><p id="actionMessage" class="action-message">Connect your wallet to join this round</p></div>
+        <div class="action-area"><button id="betButton" class="bet-button" style="border-radius: 15px" type="button"><span>Connect your wallet</span></button><p id="actionMessage" class="action-message">Connect your wallet to join this round</p></div>
       </section>
       <footer class="footer-note"><span>powered by</span> <strong>minuttery protocol</strong><span class="footer-line"></span><span>every 60 seconds</span></footer>
     </main>
@@ -38,13 +38,39 @@
         <h2 id="walletTitle">Choose your wallet</h2>
         <p class="modal-copy">Connect a Solana wallet to join the current round.</p>
         <div class="wallet-list">
-          <button class="wallet-option" data-wallet="phantom" type="button"><span class="wallet-icon phantom-icon">◆</span><span><strong>Phantom</strong><small id="phantomStatus">Available on this device</small></span><span class="wallet-chevron">↗</span></button>
-          <button class="wallet-option" data-wallet="solflare" type="button"><span class="wallet-icon solflare-icon">S</span><span><strong>Solflare</strong><small id="solflareStatus">Available on this device</small></span><span class="wallet-chevron">↗</span></button>
+          <button class="wallet-option" data-wallet="phantom" type="button"><span class="wallet-icon phantom-icon">◆</span><span><strong>Phantom</strong><small id="phantomStatus">Available on this device</small></span></button>
+          <button class="wallet-option" data-wallet="solflare" type="button"><span class="wallet-icon solflare-icon">S</span><span><strong>Solflare</strong><small id="solflareStatus">Available on this device</small></span></button>
+          <button class="wallet-option" data-wallet="backpack" type="button"><span class="wallet-icon backpack-icon">B</span><span><strong>Backpack</strong><small id="backpackStatus">Available on this device</small></span></button>
         </div>
         <p id="walletMessage" class="wallet-message"></p>
       </div>
     </div>
 
-    <script type="module" src="script.js"></script>
+    <div id="winnerModal" class="wallet-modal" hidden>
+      <div class="wallet-dialog winner-dialog" role="dialog" aria-modal="true" aria-labelledby="winnerTitle">
+        <button id="closeWinnerModal" class="modal-close" type="button" aria-label="Close winner announcement">×</button>
+        <p class="modal-kicker">round resolved</p>
+        <h2 id="winnerTitle">Winner selected</h2>
+        <p class="winner-address-label">Winning wallet</p>
+        <p id="winnerAddress" class="winner-address"></p>
+        <p id="winnerSummary" class="modal-copy"></p>
+        <details class="fairness-details">
+          <summary>How to verify provably fair</summary>
+          <div class="fairness-copy">
+            <p>The program verified the ECVRF proof before writing this winner on-chain.</p>
+            <dl class="fairness-values">
+              <div><dt>round</dt><dd id="proofRound"></dd></div>
+              <div><dt>participants</dt><dd id="proofParticipants"></dd></div>
+              <div><dt>alpha</dt><dd id="proofAlpha"></dd></div>
+            </dl>
+            <p>Rebuild <code>alpha = SHA-256("minuttery-v2" || round_id || total_pot || wallet ...)</code>, verify the worker's ECVRF proof with the configured operator key, then calculate <code>u64_le(output[0..8]) % participants</code>. The result must point to this wallet.</p>
+            <a id="roundExplorerLink" class="explorer-link" target="_blank" rel="noreferrer">View round on Solana Explorer ↗</a>
+            <p class="fairness-note">The proof bytes are not stored inside <code>RoundState</code>; the settlement transaction is the source for independently inspecting the submitted proof.</p>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <script type="module" src="script.js?v=27"></script>
   </body>
 </html>
