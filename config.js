@@ -1,0 +1,11 @@
+export const PROGRAM_ID_BASE58 = "9Uf52hSPJPDqDj7QFqL5dKmdJseU1pRtzL8oNQGeDxrP";
+export const ROOM_TIERS = [0.1, 1, 2, 5];
+export const HOST_COPY = "Fee refunded. You earn 1% of the pot.";
+export const API_BASE = "";
+export const RPC_ENDPOINT = "https://api.devnet.solana.com";
+export const ROUND_MS = 60_000;
+export const BETTING_CLOSES_AT = 55;
+export const REFUND_AFTER_MS = 30_000;
+export const WINNERS_PAGE_SIZE = 12;
+export const CACHE_BUST = "36";
+export const TELEGRAM_URL = "https://t.me/minuttery";
