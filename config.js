@@ -1,6 +1,6 @@
 export const PROGRAM_ID_BASE58 = "9Uf52hSPJPDqDj7QFqL5dKmdJseU1pRtzL8oNQGeDxrP";
 export const ROOM_TIERS = [0.1, 1, 2, 5];
-export const HOST_COPY = "Fee refunded. You earn 1% of the pot.";
+export const HOST_COPY = "Open the room and you earn 1% of the pot. Your opener fee comes back.";
 export const API_BASE = "";
 export const RPC_ENDPOINT = "https://api.devnet.solana.com";
 export const ROUND_MS = 60_000;

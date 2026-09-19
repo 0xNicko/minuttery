@@ -8,7 +8,7 @@
   <title>minuttery</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="favicon.svg" />
-  <link rel="stylesheet" href="style.css?v=38" />
+  <link rel="stylesheet" href="style.css?v=39" />
 </head>
 
 <body>
@@ -22,13 +22,15 @@
         <button id="balanceButton" class="balance-chip" type="button">
           <span id="balanceLabel">0.00 SOL</span>
           <svg class="chip-caret" viewBox="0 0 12 12" aria-hidden="true">
-            <path d="M2.2 4.2 6 8l3.8-3.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M2.2 4.2 6 8l3.8-3.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+              stroke-linejoin="round" />
           </svg>
         </button>
       </div>
-      <button class="notify-button" type="button" aria-label="Notifications" id="notifyButton">
+      <button class="notify-button" type="button" aria-label="Challenge someone" id="inviteButton">
         <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-          <path fill="currentColor" d="M12 2.4a6.2 6.2 0 0 0-6.2 6.2v2.15c0 .7-.22 1.38-.62 1.94L3.8 14.9a1.1 1.1 0 0 0 .9 1.75h14.6a1.1 1.1 0 0 0 .9-1.75l-1.38-2.21a3.4 3.4 0 0 1-.62-1.94V8.6A6.2 6.2 0 0 0 12 2.4Zm-2.35 16.1a2.35 2.35 0 0 0 4.7 0H9.65Z"/>
+          <path fill="currentColor"
+            d="M3.04 11.16 20.1 3.64c.82-.36 1.6.48 1.2 1.3L14.7 21.1c-.4.86-1.64.78-1.92-.12l-1.86-6.08-6.08-1.86c-.9-.28-.98-1.52-.12-1.92Zm5.2 1.66 3.78 1.16c.22.07.4.24.46.47l1.1 3.6 4.86-11.18-10.2 5.95Z" />
         </svg>
       </button>
     </div>
@@ -77,7 +79,8 @@
       <button id="passkeyButton" class="passkey-button" type="button">
         <span class="passkey-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="18" height="18">
-            <path fill="currentColor" d="M12 1.8a4.7 4.7 0 0 0-4.7 4.7v2.2H6.4A2.4 2.4 0 0 0 4 11.1v8.4A2.4 2.4 0 0 0 6.4 22h11.2a2.4 2.4 0 0 0 2.4-2.5v-8.4a2.4 2.4 0 0 0-2.4-2.4h-.9V6.5A4.7 4.7 0 0 0 12 1.8Zm0 1.8A2.9 2.9 0 0 1 14.9 6.5v2.2H9.1V6.5A2.9 2.9 0 0 1 12 3.6Z"/>
+            <path fill="currentColor"
+              d="M12 1.8a4.7 4.7 0 0 0-4.7 4.7v2.2H6.4A2.4 2.4 0 0 0 4 11.1v8.4A2.4 2.4 0 0 0 6.4 22h11.2a2.4 2.4 0 0 0 2.4-2.5v-8.4a2.4 2.4 0 0 0-2.4-2.4h-.9V6.5A4.7 4.7 0 0 0 12 1.8Zm0 1.8A2.9 2.9 0 0 1 14.9 6.5v2.2H9.1V6.5A2.9 2.9 0 0 1 12 3.6Z" />
           </svg>
         </span>
         <span>Sign in with passkey</span>
@@ -119,7 +122,8 @@
         <div><span>Typical arrival</span><strong>~15 sec</strong></div>
         <div><span>Network fee</span><strong>&lt;0.01 SOL</strong></div>
       </div>
-      <p class="deposit-warning">Only send assets on the <strong>Solana</strong> network. Assets sent on any other network may be permanently lost.</p>
+      <p class="deposit-warning">Only send assets on the <strong>Solana</strong> network. Assets sent on any other
+        network may be permanently lost.</p>
     </div>
   </div>
 
@@ -135,7 +139,10 @@
         <div><span>Rounds joined</span><strong id="accountJoined">0</strong></div>
         <div><span>Rounds won</span><strong id="accountWon">0</strong></div>
       </div>
-      <button id="openDepositFromAccount" class="ghost-button" type="button">Deposit</button>
+      <div class="money-row">
+        <button id="openDepositFromAccount" class="ghost-button money-action" type="button">Deposit</button>
+        <button id="openWithdrawFromAccount" class="ghost-button money-action" type="button">Withdraw</button>
+      </div>
       <button id="disconnectWallet" class="ghost-button danger-button" type="button">Log out</button>
     </div>
   </div>
@@ -180,11 +187,73 @@
         <span id="historyPageLabel">Page 1</span>
         <button id="historyNext" class="pager-button" type="button">Next</button>
       </div>
+      <button id="openClaimSheet" class="ghost-button claim-link" type="button">Unsettled round? Claim a refund</button>
       <button id="historyClose" class="ghost-button" type="button">Close</button>
     </div>
   </div>
 
-  <script type="module" src="script.js?v=38"></script>
+  <div id="inviteModal" class="wallet-modal" hidden>
+    <div class="wallet-dialog sheet-dialog" role="dialog" aria-modal="true" aria-labelledby="inviteTitle">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <button id="closeInviteModal" class="modal-close" type="button" aria-label="Close">×</button>
+      <p class="modal-kicker">this minute</p>
+      <h2 id="inviteTitle">Challenge someone</h2>
+      <p class="modal-copy">Send a one-minute room. They join the same pot, same clock.</p>
+
+      <textarea id="inviteMessage" class="invite-message" rows="4"></textarea>
+      <div class="share-row">
+        <button class="share-button" data-share="x" type="button">X</button>
+        <button class="share-button" data-share="telegram" type="button">Telegram</button>
+        <button class="share-button" data-share="discord" type="button">Discord</button>
+        <button class="share-button" data-share="copy" type="button">Copy</button>
+      </div>
+
+      <a id="telegramAlerts" class="telegram-follow" href="https://t.me/minuttery" target="_blank" rel="noreferrer">Get
+        round <span class="telegram-follow-highlight">alerts</span> on Telegram
+        <svg class="ticker-chevron" viewBox="0 0 12 12" width="10" height="10" aria-hidden="true">
+          <path d="M4.2 2.2 8 6l-3.8 3.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+            stroke-linejoin="round" />
+        </svg>
+      </a>
+    </div>
+  </div>
+
+  <div id="withdrawModal" class="wallet-modal" hidden>
+    <div class="wallet-dialog sheet-dialog" role="dialog" aria-modal="true" aria-labelledby="withdrawTitle">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <button id="closeWithdrawModal" class="modal-close" type="button" aria-label="Close">×</button>
+      <p class="modal-kicker">send SOL</p>
+      <h2 id="withdrawTitle">Withdraw</h2>
+      <p class="modal-copy">Send SOL from this minuttery wallet to another Solana address.</p>
+      <label class="sheet-label" for="withdrawTo">Destination</label>
+      <input id="withdrawTo" class="field-input" type="text" autocomplete="off" spellcheck="false"
+        placeholder="Solana address" />
+      <label class="sheet-label" for="withdrawAmount">Amount</label>
+      <input id="withdrawAmount" class="field-input" type="number" min="0" step="0.01" placeholder="0.00" />
+      <p class="passkey-hint">Keep a little SOL for fees. Typical send is under 0.00001 SOL.</p>
+      <button id="withdrawSend" class="bet-button" type="button"><span>Send SOL</span></button>
+      <p id="withdrawStatus" class="wallet-message"></p>
+    </div>
+  </div>
+
+  <div id="claimModal" class="wallet-modal" hidden>
+    <div class="wallet-dialog sheet-dialog" role="dialog" aria-modal="true" aria-labelledby="claimTitle">
+      <div class="sheet-handle" aria-hidden="true"></div>
+      <button id="closeClaimModal" class="modal-close" type="button" aria-label="Close">×</button>
+      <p class="modal-kicker">emergency</p>
+      <h2 id="claimTitle">Claim an unsettled round</h2>
+      <p class="modal-copy">Only if the worker missed the settle window (after second 85). Refunds every stake and
+        returns the room rent to the opener.</p>
+      <label class="sheet-label" for="claimRoundId">Round id</label>
+      <input id="claimRoundId" class="field-input" type="number" inputmode="numeric" />
+      <label class="sheet-label" for="claimTier">Room</label>
+      <select id="claimTier" class="field-input"></select>
+      <button id="claimRefund" class="bet-button settle-refund" type="button"><span>Refund this round</span></button>
+      <p id="claimStatus" class="wallet-message"></p>
+    </div>
+  </div>
+
+  <script type="module" src="script.js?v=40"></script>
 </body>
 
 </html>

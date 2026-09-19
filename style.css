@@ -192,8 +192,10 @@ button {
   transition: .2s ease;
 }
 
-.notify-button:hover {
-  color: var(--accent);
+.notify-button:hover,
+.notify-button.is-active {
+  color: var(--bg);
+  background: var(--accent);
   border-color: var(--accent);
 }
 
@@ -396,7 +398,7 @@ button {
   flex-shrink: 0;
 }
 
-.stat + .stat {
+.stat+.stat {
   border-left: 1px solid var(--line);
   padding-left: 27px;
 }
@@ -789,6 +791,88 @@ button {
   font-size: .68rem;
   letter-spacing: .08em;
   text-transform: uppercase;
+}
+
+.money-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.money-action {
+  margin: 0;
+}
+
+.invite-message,
+.field-input {
+  width: 100%;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #101312;
+  color: var(--text);
+  /* font-size must stay >=16px or iOS Safari auto-zooms on focus */
+  font: 500 16px/1.45 "Trebuchet MS", sans-serif;
+  resize: none;
+}
+
+.share-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin: 4px 0 16px;
+}
+
+.share-button {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #151817;
+  color: var(--text);
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.share-button:hover,
+.share-button.is-active {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.telegram-follow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+  width: 100%;
+  color: var(--muted);
+  font-size: .72rem;
+  text-align: center;
+  text-decoration: none;
+}
+
+.telegram-follow:hover {
+  color: var(--accent);
+}
+
+.telegram-follow-highlight {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.telegram-follow .ticker-chevron {
+  color: inherit;
+}
+
+.claim-link {
+  margin-top: 8px;
+  font-size: .72rem;
+  color: var(--muted);
 }
 
 /* =========================================================
@@ -1191,6 +1275,7 @@ button {
    12. Motion
    ========================================================= */
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {

@@ -73,6 +73,7 @@ export async function findWinnerRow(roundId, roomTier) {
   if (exact?.winner) return exact;
   return (
     pool.find((row) => Number(row.roundId) === Number(roundId) && row.winner) ||
+    pool.find((row) => Number(row.roundId) === Number(roundId) && row.kind === "refunded") ||
     exact ||
     null
   );

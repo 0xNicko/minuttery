@@ -5,7 +5,7 @@ import {
   web3,
 } from "https://esm.sh/@coral-xyz/anchor@0.30.1?bundle";
 import QRCode from "https://esm.sh/qrcode@1.5.4";
-import { createOrGetPasskeyWallet, handleFromPubkey } from "./auth.js?v=38";
+import { createOrGetPasskeyWallet, handleFromPubkey } from "./auth.js?v=39";
 import {
   API_BASE,
   BETTING_CLOSES_AT,
@@ -15,8 +15,9 @@ import {
   ROOM_TIERS,
   ROUND_MS,
   RPC_ENDPOINT,
+  TELEGRAM_URL,
   WINNERS_PAGE_SIZE,
-} from "./config.js?v=38";
+} from "./config.js?v=39";
 import {
   elapsedInRound,
   localRoundId,
@@ -24,9 +25,9 @@ import {
   roundSeconds,
   syncClock,
   syncedNow,
-} from "./clock.js?v=38";
-import { fetchSyncState, fetchWinners, findWinnerRow, roomFromSync } from "./api.js?v=38";
-import { bindSheetDismiss, closeModal, copyText, openModal } from "./ui.js?v=38";
+} from "./clock.js?v=39";
+import { fetchSyncState, fetchWinners, findWinnerRow, roomFromSync } from "./api.js?v=39";
+import { bindSheetDismiss, closeModal, copyText, openModal } from "./ui.js?v=39";
 
 const PROGRAM_ID = new web3.PublicKey(PROGRAM_ID_BASE58);
 const connection = new web3.Connection(RPC_ENDPOINT, {
@@ -80,6 +81,16 @@ const elements = {
   historyPageLabel: document.getElementById("historyPageLabel"),
   historyPrev: document.getElementById("historyPrev"),
   historyNext: document.getElementById("historyNext"),
+  inviteModal: document.getElementById("inviteModal"),
+  inviteMessage: document.getElementById("inviteMessage"),
+  withdrawModal: document.getElementById("withdrawModal"),
+  withdrawTo: document.getElementById("withdrawTo"),
+  withdrawAmount: document.getElementById("withdrawAmount"),
+  withdrawStatus: document.getElementById("withdrawStatus"),
+  claimModal: document.getElementById("claimModal"),
+  claimRoundId: document.getElementById("claimRoundId"),
+  claimTier: document.getElementById("claimTier"),
+  claimStatus: document.getElementById("claimStatus"),
 };
 
 let walletPublicKey = null;
@@ -439,9 +450,28 @@ function openSettleCalculating() {
   openModal(elements.settleModal);
 }
 
+function openSettleSolo(roundId, players = 1) {
+  hideSettleOutcome();
+  elements.settleKicker.textContent = "no draw";
+  elements.settleTitle.textContent = "Stake returned";
+  elements.settleCopy.textContent =
+    `Round #${roundId} · ${players} player. Nobody else joined, so there was no raffle. The program sent the stake back to the only wallet in the room.`;
+  elements.settleSpinner.hidden = true;
+  elements.settleRefund.hidden = true;
+}
+
 function openSettleWinner(row, fallbackPlayers = 0) {
   const stake = ROOM_TIERS[row.tier] ?? row.tier;
   const players = Number(row.n ?? row.players ?? fallbackPlayers) || 0;
+  if (players <= 1 || row.kind === "refunded") {
+    openSettleSolo(row.roundId, players || 1);
+    if (row.signature) {
+      elements.settleVerifyLink.hidden = false;
+      elements.settleVerifyLink.href = explorerTx(row.signature);
+      elements.settleVerifyLink.textContent = "View return transaction";
+    }
+    return;
+  }
   elements.settleKicker.textContent = "round resolved";
   elements.settleTitle.textContent = "Winner selected";
   elements.settleCopy.textContent = `Round #${row.roundId} · ${stake} SOL room · ${players} players`;
@@ -506,9 +536,14 @@ async function startSettleWatch() {
   try {
     while (!resolved) {
       const row = await findWinnerRow(watchedRound, watchedTier).catch(() => null);
-      if (row?.winner) {
-        openSettleWinner(row, watchedPlayers);
+      if (row?.winner || row?.kind === "refunded") {
+        openSettleWinner(row, watchedPlayers || Number(row.n) || 0);
         loadWinnersFeed();
+        resolved = true;
+        return;
+      }
+      if (watchedPlayers <= 1 && Date.now() - startedAt >= 8_000) {
+        openSettleSolo(watchedRound, watchedPlayers || 1);
         resolved = true;
         return;
       }
@@ -594,6 +629,12 @@ async function refundRound() {
 
 function chevronSvg() {
   return `<svg viewBox="0 0 12 12" width="10" height="10"><path d="M4.2 2.2 8 6l-3.8 3.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+// keeps the yellow fill visible briefly on tap since touch devices have no real :hover
+function flashActive(element) {
+  element.classList.add("is-active");
+  window.setTimeout(() => element.classList.remove("is-active"), 250);
 }
 
 function winnerLine(row) {
@@ -838,6 +879,103 @@ async function placeBet() {
   }
 }
 
+function inviteText() {
+  const site = window.location.origin;
+  return `I'm in a 1-minute pot on minuttery.com on Solana. Join this minute to beat me!`;
+}
+
+function openInviteSheet() {
+  elements.inviteMessage.value = inviteText();
+  openModal(elements.inviteModal);
+}
+
+function shareInvite(channel) {
+  const text = (elements.inviteMessage.value || inviteText()).trim();
+  const url = window.location.origin;
+  const encoded = encodeURIComponent(text);
+  if (channel === "x") {
+    window.open(`https://twitter.com/intent/tweet?text=${encoded}`, "_blank", "noopener");
+    return;
+  }
+  if (channel === "telegram") {
+    window.open(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encoded}`, "_blank", "noopener");
+    return;
+  }
+  if (channel === "discord") {
+    copyText(text, document.querySelector('[data-share="discord"]'));
+    window.open("https://discord.com/channels/@me", "_blank", "noopener");
+    return;
+  }
+  if (channel === "copy") {
+    copyText(text, document.querySelector('[data-share="copy"]'));
+  }
+}
+
+function openWithdrawSheet() {
+  elements.withdrawStatus.textContent = "";
+  elements.withdrawAmount.value = "";
+  openModal(elements.withdrawModal);
+}
+
+async function sendWithdraw() {
+  if (!connectedWallet || !walletPublicKey) return connectWallet();
+  const destRaw = elements.withdrawTo.value.trim();
+  const amountSol = Number(elements.withdrawAmount.value);
+  elements.withdrawStatus.textContent = "";
+  try {
+    const dest = new web3.PublicKey(destRaw);
+    if (!Number.isFinite(amountSol) || amountSol <= 0) throw new Error("Enter an amount.");
+    const lamports = Math.round(amountSol * 1e9);
+    const transaction = new web3.Transaction().add(
+      web3.SystemProgram.transfer({
+        fromPubkey: walletPublicKey,
+        toPubkey: dest,
+        lamports,
+      }),
+    );
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("confirmed");
+    transaction.recentBlockhash = blockhash;
+    transaction.lastValidBlockHeight = lastValidBlockHeight;
+    transaction.feePayer = walletPublicKey;
+    elements.withdrawStatus.textContent = "Confirm in your wallet…";
+    const signed = await connectedWallet.signTransaction(transaction);
+    const signature = await connection.sendRawTransaction(signed.serialize(), { skipPreflight: false });
+    elements.withdrawStatus.textContent = `Sent. ${signature.slice(0, 16)}…`;
+    refreshWalletBalance();
+  } catch (error) {
+    elements.withdrawStatus.textContent = error.message || "Withdraw failed";
+  }
+}
+
+function openClaimSheet() {
+  elements.claimStatus.textContent = "";
+  elements.claimRoundId.value = String(joinedRound?.roundId ?? currentRoundId ?? "");
+  if (!elements.claimTier.options.length) {
+    ROOM_TIERS.forEach((sol, index) => {
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = `${sol} SOL room`;
+      elements.claimTier.appendChild(option);
+    });
+  }
+  elements.claimTier.value = String(joinedRound?.tier ?? selectedRoomTier ?? 0);
+  openModal(elements.claimModal);
+}
+
+async function claimRefundFromSheet() {
+  joinedRound = {
+    roundId: Number(elements.claimRoundId.value),
+    tier: Number(elements.claimTier.value),
+  };
+  elements.claimStatus.textContent = "Preparing refund…";
+  try {
+    await refundRound();
+    elements.claimStatus.textContent = "Refund submitted if the round was still open.";
+  } catch (error) {
+    elements.claimStatus.textContent = error.message || "Refund failed";
+  }
+}
+
 function bindChrome() {
   elements.connect.addEventListener("click", openWalletModal);
   elements.balanceButton.addEventListener("click", openAccountSheet);
@@ -847,6 +985,29 @@ function bindChrome() {
     closeModal(elements.accountModal);
     openDepositSheet();
   });
+  document.getElementById("openWithdrawFromAccount").addEventListener("click", () => {
+    closeModal(elements.accountModal);
+    openWithdrawSheet();
+  });
+  document.getElementById("inviteButton").addEventListener("click", (event) => {
+    flashActive(event.currentTarget);
+    openInviteSheet();
+  });
+  document.getElementById("closeInviteModal").addEventListener("click", () => closeModal(elements.inviteModal));
+  document.querySelectorAll("[data-share]").forEach((button) => {
+    button.addEventListener("click", () => {
+      flashActive(button);
+      shareInvite(button.dataset.share);
+    });
+  });
+  document.getElementById("closeWithdrawModal").addEventListener("click", () => closeModal(elements.withdrawModal));
+  document.getElementById("withdrawSend").addEventListener("click", sendWithdraw);
+  document.getElementById("openClaimSheet").addEventListener("click", () => {
+    closeModal(elements.historyModal);
+    openClaimSheet();
+  });
+  document.getElementById("closeClaimModal").addEventListener("click", () => closeModal(elements.claimModal));
+  document.getElementById("claimRefund").addEventListener("click", claimRefundFromSheet);
   document.getElementById("copyDepositAddress").addEventListener("click", (event) => {
     copyText(walletPublicKey?.toBase58() || "", event.currentTarget);
   });
@@ -881,6 +1042,9 @@ function bindChrome() {
     elements.accountModal,
     elements.settleModal,
     elements.historyModal,
+    elements.inviteModal,
+    elements.withdrawModal,
+    elements.claimModal,
   ].forEach((modal) => bindSheetDismiss(modal, () => closeModal(modal)));
 
   document.querySelectorAll(".bet-preset").forEach((button) =>
